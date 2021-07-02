@@ -10,6 +10,7 @@ import com.citrus.ktordemo.R
 import kotlin.math.min
 import kotlin.properties.Delegates
 
+/**通過@JvmOverloads註解把多個建構子合併成一個建構子*/
 class ColorRadioButton @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null

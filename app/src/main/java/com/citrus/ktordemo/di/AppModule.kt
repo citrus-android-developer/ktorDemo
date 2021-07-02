@@ -1,16 +1,27 @@
 package com.citrus.ktordemo.di
 
+import android.app.Application
 import android.content.Context
 import com.citrus.ktordemo.data.remote.api.SetupApi
+import com.citrus.ktordemo.data.remote.ws.CustomGsonMessageAdapter
+import com.citrus.ktordemo.data.remote.ws.DrawingApi
+import com.citrus.ktordemo.data.remote.ws.FlowStreamAdapter
 import com.citrus.ktordemo.repository.DefaultSetupRepository
 import com.citrus.ktordemo.repository.SetupRepository
 import com.citrus.ktordemo.util.Constants.HTTP_BASE_URL
 import com.citrus.ktordemo.util.Constants.HTTP_BASE_URL_LOCALHOST
+import com.citrus.ktordemo.util.Constants.RECONNECT_INTERVAL
 import com.citrus.ktordemo.util.Constants.USE_LOCALHOST
+import com.citrus.ktordemo.util.Constants.WS_BASE_URL
+import com.citrus.ktordemo.util.Constants.WS_BASE_URL_LOCALHOST
 import com.citrus.ktordemo.util.DispatcherProvider
 import com.citrus.ktordemo.util.clientId
 import com.citrus.ktordemo.util.dataStore
 import com.google.gson.Gson
+import com.tinder.scarlet.Scarlet
+import com.tinder.scarlet.lifecycle.android.AndroidLifecycle
+import com.tinder.scarlet.retry.LinearBackoffStrategy
+import com.tinder.scarlet.websocket.okhttp.newWebSocketFactory
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -18,6 +29,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -25,6 +37,7 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import javax.inject.Singleton
 
+@ExperimentalCoroutinesApi
 @Module
 @InstallIn(SingletonComponent::class)
 object AppModule {
@@ -34,11 +47,11 @@ object AppModule {
     fun provideSetupRepository(
         setupApi: SetupApi,
         @ApplicationContext context: Context
-    ):SetupRepository = DefaultSetupRepository(setupApi,context)
+    ): SetupRepository = DefaultSetupRepository(setupApi, context)
 
     @Singleton
     @Provides
-    fun provideOkHttpClient(clientId:String): OkHttpClient {
+    fun provideOkHttpClient(clientId: String): OkHttpClient {
         return OkHttpClient.Builder()
             .addInterceptor { chain ->
                 val url = chain.request().url.newBuilder()
@@ -57,15 +70,37 @@ object AppModule {
 
     @Singleton
     @Provides
-    fun provideClientId(@ApplicationContext context: Context ): String {
+    fun provideClientId(@ApplicationContext context: Context): String {
         return runBlocking { context.dataStore.clientId() }
+    }
+
+    @Singleton
+    @Provides
+    fun provideDrawingApi(
+        app: Application,
+        okHttpClient: OkHttpClient,
+        gson:Gson
+    ): DrawingApi {
+        return Scarlet.Builder()
+            .backoffStrategy(LinearBackoffStrategy(RECONNECT_INTERVAL))
+            .lifecycle(AndroidLifecycle.ofApplicationForeground(app))
+            .webSocketFactory(
+                okHttpClient.newWebSocketFactory(
+                    if (USE_LOCALHOST) WS_BASE_URL_LOCALHOST else WS_BASE_URL
+                )
+            )
+            /**Default Scarlet don't know how to convert input data to flow*/
+            .addStreamAdapterFactory(FlowStreamAdapter.Factory)
+            .addMessageAdapterFactory(CustomGsonMessageAdapter.Factory(gson))
+            .build()
+            .create()
     }
 
     @Singleton
     @Provides
     fun provideSetupApi(okHttpClient: OkHttpClient): SetupApi {
         return Retrofit.Builder()
-            .baseUrl(if(USE_LOCALHOST) HTTP_BASE_URL_LOCALHOST else HTTP_BASE_URL)
+            .baseUrl(if (USE_LOCALHOST) HTTP_BASE_URL_LOCALHOST else HTTP_BASE_URL)
             .addConverterFactory(GsonConverterFactory.create())
             .client(okHttpClient)
             .build()
