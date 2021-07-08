@@ -18,6 +18,7 @@ import com.citrus.ktordemo.databinding.FragmentCreateRoomBinding
 import com.citrus.ktordemo.ui.setup.CreateRoomViewModel
 import com.citrus.ktordemo.ui.setup.SetupViewModel
 import com.citrus.ktordemo.util.Constants
+import com.citrus.ktordemo.util.hideKeyBoard
 import com.citrus.ktordemo.util.navigateSafely
 import com.citrus.ktordemo.util.snackBar
 import dagger.hilt.android.AndroidEntryPoint
@@ -49,6 +50,7 @@ class CreateRoomFragment: Fragment(R.layout.fragment_create_room) {
                     binding.tvMaxPersons.text.toString().toInt()
                 )
             )
+            requireActivity().hideKeyBoard(binding.root)
         }
     }
 
@@ -73,7 +75,6 @@ class CreateRoomFragment: Fragment(R.layout.fragment_create_room) {
                     }
                     is CreateRoomViewModel.SetupEvent.CreateRoomErrorEvent -> {
                         binding.createRoomProgressBar.isVisible = false
-                        Log.e("error",event.error)
                         snackBar(event.error)
                     }
                     is CreateRoomViewModel.SetupEvent.JoinRoomEvent -> {

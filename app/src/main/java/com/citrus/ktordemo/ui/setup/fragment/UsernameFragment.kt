@@ -13,6 +13,7 @@ import com.citrus.ktordemo.ui.setup.SetupViewModel
 import com.citrus.ktordemo.ui.setup.UsernameViewModel
 import com.citrus.ktordemo.util.Constants.MAX_USERNAME_LENGTH
 import com.citrus.ktordemo.util.Constants.MIN_USERNAME_LENGTH
+import com.citrus.ktordemo.util.hideKeyBoard
 import com.citrus.ktordemo.util.navigateSafely
 import com.citrus.ktordemo.util.snackBar
 import dagger.hilt.android.AndroidEntryPoint
@@ -35,6 +36,7 @@ class UsernameFragment : Fragment(R.layout.fragment_username) {
             viewModel.validateUserNameAndNavigateToSelectRoom(
                 binding.etUsername.text.toString()
             )
+            requireActivity().hideKeyBoard(binding.root)
         }
     }
 

@@ -1,8 +1,8 @@
 package com.citrus.ktordemo.ui.drawing
 
+import android.Manifest
 import android.graphics.Color
 import android.os.Bundle
-import android.view.Gravity
 import android.view.MenuItem
 import android.view.MotionEvent
 import android.view.View
@@ -13,25 +13,33 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.GravityCompat
 import androidx.core.view.isVisible
 import androidx.drawerlayout.widget.DrawerLayout
-import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.*
 import androidx.navigation.navArgs
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.citrus.ktordemo.R
 import com.citrus.ktordemo.adapter.ChatMessageAdapter
+import com.citrus.ktordemo.adapter.PlayerAdapter
+import com.citrus.ktordemo.data.remote.ws.Room
 import com.citrus.ktordemo.data.remote.ws.models.*
 import com.citrus.ktordemo.databinding.ActivityDrawingBinding
+import com.citrus.ktordemo.ui.dialogs.LeaveDialog
 import com.citrus.ktordemo.util.Constants
+import com.citrus.ktordemo.util.hideKeyBoard
 import com.google.android.material.snackbar.Snackbar
 import com.tinder.scarlet.WebSocket
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
+import pub.devrel.easypermissions.EasyPermissions
 import javax.inject.Inject
 
+private const val REQUEST_CODE_RECORD_AUDIO = 1
+
 @AndroidEntryPoint
-class DrawingActivity : AppCompatActivity() {
+class DrawingActivity : AppCompatActivity(), LifecycleObserver,
+    EasyPermissions.PermissionCallbacks {
 
     private lateinit var binding: ActivityDrawingBinding
 
@@ -44,14 +52,19 @@ class DrawingActivity : AppCompatActivity() {
 
     private lateinit var toggle: ActionBarDrawerToggle
     private lateinit var rvPlayers: RecyclerView
+
+    @Inject
+    lateinit var playerAdapter: PlayerAdapter
     private lateinit var chatMessageAdapter: ChatMessageAdapter
 
     private var updateChatJob: Job? = null
+    private var updatePlayersJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityDrawingBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        ProcessLifecycleOwner.get().lifecycle.addObserver(this)
         subscribeToUiStateUpdates()
         listenToConnectionEvents()
         listenToSocketEvents()
@@ -68,6 +81,11 @@ class DrawingActivity : AppCompatActivity() {
         val header = layoutInflater.inflate(R.layout.nav_drawer_header, binding.navView)
         rvPlayers = header.findViewById(R.id.rvPlayers)
         binding.root.setDrawerLockMode(DrawerLayout.LOCK_MODE_LOCKED_CLOSED)
+
+        rvPlayers.apply {
+            adapter = playerAdapter
+            layoutManager = LinearLayoutManager(this@DrawingActivity)
+        }
 
         binding.ibPlayers.setOnClickListener {
             binding.root.setDrawerLockMode(DrawerLayout.LOCK_MODE_UNLOCKED)
@@ -100,13 +118,18 @@ class DrawingActivity : AppCompatActivity() {
                 )
             )
             binding.etMessage.text?.clear()
+            hideKeyBoard(binding.root)
         }
 
         binding.ibUndo.setOnClickListener {
-            if(binding.drawingView.isUserDrawing){
+            if (binding.drawingView.isUserDrawing) {
                 binding.drawingView.undo()
                 viewModel.sendBaseModel(DrawAction(DrawAction.ACTION_UNDO))
             }
+        }
+
+        binding.drawingView.setPathDataChangedListener {
+            viewModel.setPathData(it)
         }
 
         binding.colorGroup.setOnCheckedChangeListener { _, checkedId ->
@@ -114,9 +137,44 @@ class DrawingActivity : AppCompatActivity() {
         }
 
         binding.drawingView.setOnDrawListener {
-            if(binding.drawingView.isUserDrawing){
+            if (binding.drawingView.isUserDrawing) {
                 viewModel.sendBaseModel(it)
             }
+        }
+    }
+
+    private fun hasRecordAudioPermission() = EasyPermissions.hasPermissions(
+        this,
+       Manifest.permission.RECORD_AUDIO
+    )
+
+    private fun requestRecordAudioPermission() {
+        EasyPermissions.requestPermissions(
+            this,
+            getString(R.string.rationale_record_audio),
+            REQUEST_CODE_RECORD_AUDIO,
+            Manifest.permission.RECORD_AUDIO
+        )
+    }
+
+    override fun onPermissionsGranted(requestCode: Int, perms: MutableList<String>) {
+        TODO("Not yet implemented")
+    }
+
+    override fun onPermissionsDenied(requestCode: Int, perms: MutableList<String>) {
+        TODO("Not yet implemented")
+    }
+
+    private fun setColorGroupVisibility(isVisible: Boolean) {
+        binding.colorGroup.isVisible = isVisible
+        binding.ibUndo.isVisible = isVisible
+    }
+
+    private fun setMessageInputVisibility(isVisible: Boolean) {
+        binding.apply {
+            tilMessage.isVisible = isVisible
+            ibSend.isVisible = isVisible
+            ibClearText.isVisible = isVisible
         }
     }
 
@@ -127,8 +185,34 @@ class DrawingActivity : AppCompatActivity() {
 
     private fun subscribeToUiStateUpdates() {
         lifecycleScope.launchWhenStarted {
+            viewModel.newWords.collect {
+                val newWords = it.newWords
+                if (newWords.isEmpty()) {
+                    return@collect
+                }
+                binding.apply {
+                    btnFirstWord.text = newWords[0]
+                    btnSecondWord.text = newWords[1]
+                    btnThirdWord.text = newWords[2]
+                    btnFirstWord.setOnClickListener {
+                        viewModel.chooseWord(newWords[0], args.roomName)
+                        viewModel.setChooseWordOverlayVisibility(false)
+                    }
+                    btnSecondWord.setOnClickListener {
+                        viewModel.chooseWord(newWords[1], args.roomName)
+                        viewModel.setChooseWordOverlayVisibility(false)
+                    }
+                    btnThirdWord.setOnClickListener {
+                        viewModel.chooseWord(newWords[2], args.roomName)
+                        viewModel.setChooseWordOverlayVisibility(false)
+                    }
+                }
+            }
+        }
+
+        lifecycleScope.launchWhenStarted {
             viewModel.chat.collect { chat ->
-                if(chatMessageAdapter.chatObjects.isEmpty()){
+                if (chatMessageAdapter.chatObjects.isEmpty()) {
                     updateChatMessageList(chat)
                 }
             }
@@ -136,7 +220,7 @@ class DrawingActivity : AppCompatActivity() {
         lifecycleScope.launchWhenStarted {
             viewModel.selectedColorButtonId.collect { id ->
                 binding.colorGroup.check(id)
-                when(id) {
+                when (id) {
                     R.id.rbBlack -> selectColor(Color.BLACK)
                     R.id.rbBlue -> selectColor(Color.BLUE)
                     R.id.rbGreen -> selectColor(Color.GREEN)
@@ -149,6 +233,75 @@ class DrawingActivity : AppCompatActivity() {
                         binding.drawingView.setColor(Color.WHITE)
                         binding.drawingView.setThickness(40f)
                     }
+                }
+            }
+        }
+        lifecycleScope.launchWhenStarted {
+            viewModel.gameState.collect { gameState ->
+                binding.apply {
+                    tvCurWord.text = gameState.word
+                    val isUserDrawing = gameState.drawingPlayer == args.username
+                    setColorGroupVisibility(isUserDrawing)
+                    setMessageInputVisibility(!isUserDrawing)
+                    drawingView.isUserDrawing = isUserDrawing
+                    ibMic.isVisible = !isUserDrawing
+                    drawingView.isEnabled = isUserDrawing
+                }
+            }
+        }
+        lifecycleScope.launchWhenStarted {
+            viewModel.players.collect { players ->
+                updatePlayersList(players)
+            }
+        }
+        lifecycleScope.launchWhenStarted {
+            viewModel.phaseTime.collect { time ->
+                binding.roundTimerProgressBar.progress = time.toInt()
+                binding.tvRemainingTimeChooseWord.text = (time / 1000L).toString()
+            }
+        }
+        lifecycleScope.launchWhenStarted {
+            viewModel.phase.collect { phase ->
+                when (phase.phase) {
+                    Room.Phase.WAITING_FOR_PLAYERS -> {
+                        binding.tvCurWord.text = getString(R.string.waiting_for_players)
+                        viewModel.cancelTimer()
+                        viewModel.setConnectionProgressBarVisibility(false)
+                        binding.roundTimerProgressBar.progress = binding.roundTimerProgressBar.max
+                    }
+                    Room.Phase.WAITING_FOR_START -> {
+                        binding.roundTimerProgressBar.max = phase.time.toInt()
+                        binding.tvCurWord.text = getString(R.string.waiting_for_start)
+                    }
+                    Room.Phase.NEW_ROUND -> {
+                        phase.drawingPlayer?.let { player ->
+                            binding.tvCurWord.text = getString(R.string.player_is_drawing, player)
+                        }
+                        binding.apply {
+                            drawingView.isEnabled = false
+                            drawingView.setColor(Color.BLACK)
+                            drawingView.setThickness(Constants.DEFAULT_PAINT_THICKNESS)
+                            roundTimerProgressBar.max = phase.time.toInt()
+                            val isUserDrawingPlayer = phase.drawingPlayer == args.username
+                            binding.chooseWordOverlay.isVisible = isUserDrawingPlayer
+                        }
+                    }
+                    Room.Phase.GAME_RUNNING -> {
+                        binding.chooseWordOverlay.isVisible = false
+                        binding.roundTimerProgressBar.max = phase.time.toInt()
+                    }
+                    Room.Phase.SHOW_WORD -> {
+                        binding.apply {
+                            if (drawingView.isDrawing) {
+                                drawingView.finishOffDrawing()
+                            }
+                            drawingView.isEnabled = false
+                            drawingView.setColor(Color.BLACK)
+                            drawingView.setThickness(Constants.DEFAULT_PAINT_THICKNESS)
+                            roundTimerProgressBar.max = phase.time.toInt()
+                        }
+                    }
+                    else -> Unit
                 }
             }
         }
@@ -166,16 +319,32 @@ class DrawingActivity : AppCompatActivity() {
 
     private fun listenToSocketEvents() = lifecycleScope.launchWhenStarted {
         viewModel.socketEvent.collect { event ->
-            when(event) {
+            when (event) {
                 is DrawingViewModel.SocketEvent.DrawDataEvent -> {
                     val drawData = event.data
-                    if(!binding.drawingView.isUserDrawing){
-                        when(drawData.motionEvent){
-                            MotionEvent.ACTION_DOWN -> binding.drawingView.startedTouchExternally(drawData)
-                            MotionEvent.ACTION_MOVE -> binding.drawingView.movedTouchExternally(drawData)
-                            MotionEvent.ACTION_UP -> binding.drawingView.releasedTouchExternally(drawData)
+                    if (!binding.drawingView.isUserDrawing) {
+                        when (drawData.motionEvent) {
+                            MotionEvent.ACTION_DOWN -> binding.drawingView.startedTouchExternally(
+                                drawData
+                            )
+                            MotionEvent.ACTION_MOVE -> binding.drawingView.movedTouchExternally(
+                                drawData
+                            )
+                            MotionEvent.ACTION_UP -> binding.drawingView.releasedTouchExternally(
+                                drawData
+                            )
                         }
                     }
+                }
+                is DrawingViewModel.SocketEvent.RoundDrawInfoEvent -> {
+                    binding.drawingView.update(event.data)
+                }
+                is DrawingViewModel.SocketEvent.GameStateEvent -> {
+                    binding.drawingView.clear()
+                }
+                is DrawingViewModel.SocketEvent.ChosenWordEvent -> {
+                    binding.tvCurWord.text = event.data.chosenWord
+                    binding.ibUndo.isEnabled = false
                 }
                 is DrawingViewModel.SocketEvent.ChatMessageEvent -> {
                     addChatObjectToRecyclerView(event.data)
@@ -187,7 +356,7 @@ class DrawingActivity : AppCompatActivity() {
                     binding.drawingView.undo()
                 }
                 is DrawingViewModel.SocketEvent.GameErrorEvent -> {
-                    when(event.data.errorType) {
+                    when (event.data.errorType) {
                         GameError.ERROR_ROOM_NOT_FOUND -> finish()
                     }
                 }
@@ -198,7 +367,7 @@ class DrawingActivity : AppCompatActivity() {
 
     private fun listenToConnectionEvents() = lifecycleScope.launchWhenStarted {
         viewModel.connectionEvent.collect { event ->
-            when(event) {
+            when (event) {
                 is WebSocket.Event.OnConnectionOpened<*> -> {
                     viewModel.sendBaseModel(
                         JoinRoomHandShake(
@@ -229,18 +398,25 @@ class DrawingActivity : AppCompatActivity() {
         binding.rvChat.layoutManager?.onSaveInstanceState()
     }
 
-    private fun updateChatMessageList(chat:List<BaseModel>){
+    private fun updatePlayersList(players: List<PlayerData>) {
+        updatePlayersJob?.cancel()
+        updatePlayersJob = lifecycleScope.launch {
+            playerAdapter.updateDataset(players)
+        }
+    }
+
+    private fun updateChatMessageList(chat: List<BaseModel>) {
         updateChatJob?.cancel()
         updateChatJob = lifecycleScope.launch {
             chatMessageAdapter.updateDataset(chat)
         }
     }
 
-    private suspend fun addChatObjectToRecyclerView(chatObject: BaseModel){
+    private suspend fun addChatObjectToRecyclerView(chatObject: BaseModel) {
         val canScrollDown = binding.rvChat.canScrollVertically(1)
         updateChatMessageList(chatMessageAdapter.chatObjects + chatObject)
         updateChatJob?.join()
-        if(!canScrollDown){
+        if (!canScrollDown) {
             binding.rvChat.scrollToPosition(chatMessageAdapter.chatObjects.size - 1)
         }
     }
@@ -252,9 +428,23 @@ class DrawingActivity : AppCompatActivity() {
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        if(toggle.onOptionsItemSelected(item)) {
+        if (toggle.onOptionsItemSelected(item)) {
             return true
         }
         return super.onOptionsItemSelected(item)
+    }
+
+    @OnLifecycleEvent(Lifecycle.Event.ON_STOP)
+    private fun onAppInBackground() {
+        viewModel.disconnect()
+    }
+
+    override fun onBackPressed() {
+        LeaveDialog().apply {
+            setPositiveButtonClickListener {
+                viewModel.disconnect()
+                finish()
+            }
+        }.show(supportFragmentManager, null)
     }
 }
