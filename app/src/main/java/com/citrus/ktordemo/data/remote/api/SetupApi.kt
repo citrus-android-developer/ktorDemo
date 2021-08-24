@@ -2,11 +2,9 @@ package com.citrus.ktordemo.data.remote.api
 
 import com.citrus.ktordemo.data.remote.responses.BasicApiResponse
 import com.citrus.ktordemo.data.remote.ws.Room
+import com.skydoves.sandwich.ApiResponse
 import retrofit2.Response
-import retrofit2.http.Body
-import retrofit2.http.GET
-import retrofit2.http.POST
-import retrofit2.http.Query
+import retrofit2.http.*
 
 interface SetupApi {
 

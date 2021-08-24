@@ -4,10 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.citrus.ktordemo.data.remote.ws.Room
 import com.citrus.ktordemo.repository.SetupRepository
-import com.citrus.ktordemo.util.Constants.MAX_ROOM_NAME_LENGTH
-import com.citrus.ktordemo.util.Constants.MAX_USERNAME_LENGTH
-import com.citrus.ktordemo.util.Constants.MIN_ROOM_NAME_LENGTH
-import com.citrus.ktordemo.util.Constants.MIN_USERNAME_LENGTH
 import com.citrus.ktordemo.util.DispatcherProvider
 import com.citrus.ktordemo.util.Resource
 import dagger.hilt.android.lifecycle.HiltViewModel
