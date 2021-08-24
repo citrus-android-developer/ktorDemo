@@ -44,7 +44,7 @@ object ActivityModule {
     @Provides
     fun provideDrawingApi(
         app: Application,
-        @WSOKHttp okHttpClient: OkHttpClient,
+        okHttpClient: OkHttpClient,
         gson: Gson
     ): DrawingApi {
         return Scarlet.Builder()
@@ -64,7 +64,7 @@ object ActivityModule {
 
     @ActivityRetainedScoped
     @Provides
-    fun provideSetupApi(@WSOKHttp okHttpClient: OkHttpClient): SetupApi {
+    fun provideSetupApi(okHttpClient: OkHttpClient): SetupApi {
         return Retrofit.Builder()
             .baseUrl(if (Constants.USE_LOCALHOST) Constants.HTTP_BASE_URL_LOCALHOST else Constants.HTTP_BASE_URL)
             .addConverterFactory(GsonConverterFactory.create())

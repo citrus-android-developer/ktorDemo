@@ -5,11 +5,11 @@ object Constants {
 
     const val USE_LOCALHOST = true
 
-    const val HTTP_BASE_URL = "https://still-meadow-15151.herokuapp.com/"
-    const val HTTP_BASE_URL_LOCALHOST = "http://192.168.0.85:8080/"
+    const val HTTP_BASE_URL = ""
+    const val HTTP_BASE_URL_LOCALHOST = "http://192.168.0.63:8080/"
 
-    const val WS_BASE_URL = "https://still-meadow-15151.herokuapp.com/ws/draw"
-    const val WS_BASE_URL_LOCALHOST = "http://192.168.0.85:8080/ws/draw"
+    const val WS_BASE_URL = ""
+    const val WS_BASE_URL_LOCALHOST = "http://192.168.0.63:8080/ws/draw"
 
     const val DEFAULT_PAINT_THICKNESS = 12f
     const val MIN_USERNAME_LENGTH = 4

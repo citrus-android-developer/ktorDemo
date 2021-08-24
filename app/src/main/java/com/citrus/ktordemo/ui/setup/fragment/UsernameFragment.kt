@@ -17,10 +17,8 @@ import com.citrus.ktordemo.util.hideKeyBoard
 import com.citrus.ktordemo.util.navigateSafely
 import com.citrus.ktordemo.util.snackBar
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.InternalCoroutinesApi
 import kotlinx.coroutines.flow.collect
 
-@InternalCoroutinesApi
 @AndroidEntryPoint
 class UsernameFragment : Fragment(R.layout.fragment_username) {
     private var _binding: FragmentUsernameBinding? = null

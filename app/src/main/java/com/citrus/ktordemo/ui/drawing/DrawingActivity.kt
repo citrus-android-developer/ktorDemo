@@ -554,4 +554,3 @@ class DrawingActivity : AppCompatActivity(), LifecycleObserver,
         }.show(supportFragmentManager, null)
     }
 }
-
